@@ -1,0 +1,13 @@
+docx2txt==0.8
+langchain
+langchain-chroma
+langchain-openai
+pandas
+python-docx
+python-dotenv
+streamlit
+rank_bm25
+langchain-community
+pypdf
+olefile
+langgraph
