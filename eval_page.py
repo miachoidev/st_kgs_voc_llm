@@ -26,7 +26,7 @@ st.info(
 st.markdown("""
 ### 평가 지표
 - **근거 일치 (40점)**: 실제 정답에서 사용된 법령/규정 근거를 정확히 찾아 사용했는지
-- **정확성 (30점)**: 실제 답변과 얼마나 일치하게 정확하고 올바르게 답변했는지
+- **신뢰성 (30점)**: 실제 답변과 무관하게 검색한 문서를 기반으로 올바르게 답변했는지
 - **완전성 (20점)**: 실제 답변의 질의 요지를 빠짐없이 뽑아냈는지. 각 질의요지별 답변을 작성했는지.(답변내용의 정확성은 제외, 질문 파악성능에 초점.)
 - **구조 준수 (10점)**: <질의요지>, <답변내용> 형식을 정확히 따랐는지, 고정 인사말이나 답변자정보는 제외하고 평가
 """)
@@ -83,7 +83,7 @@ def load_random_samples(n_samples):
 
 
 # LLM 응답을 GPT-4 Turbo로 평가
-def evaluate_with_gpt4(question, real_answer, llm_answer):
+def evaluate_with_gpt4(question, real_answer, llm_answer, retrieved_documents):
     try:
         client = OpenAI()
         messages = [
@@ -93,10 +93,14 @@ def evaluate_with_gpt4(question, real_answer, llm_answer):
             당신은 한국 가스안전공사의 민원 답변 평가 전문가입니다.
             실제 답변과 비교하여 총점(100점 만점)을 기준으로 다음 4가지 기준으로 llm 답변을 평가하세요:
             
-            1. 근거 일치 (40점): 실제 정답에서 사용된 법령/규정 근거를 정확히 찾아 사용했는지
-            2. 완전성 (20점): 실제 답변과 비교했을때 <질의요지>에 핵심 질문을 구분하여 뽑아냈는지. 각 질의요지별 답변을 작성했는지.(답변내용의 정확성은 제외, 질문 파악성능에 초점.)
-            3. 정확성 (30점) : 실제 답변의 내용과 비교하여 얼마나 일치하게 정확하고 올바르게 답변했는지
-            4. 구조 준수 (10점): <질의요지>, <답변내용> 말머리를 정확히 표기하여 작성하였는지, 각 질문이나 답변별 ㅇ 기호로 구분하여 작성했는지. (고정 인사말이나 답변자정보 및 세부 구조는 제외하고 평가)
+            1. 근거 일치 (40점): 실제 정답에서 사용된 법령/규정 등 문서와 동일한 문서를 찾았는지.
+            세부 규칙 1) 참고한 문서의 제목이 완벽하지 않아도 비슷한 제목의 문서는 반드시 일치한것으로 간주합니다.(세부 장절 항목은 제외하고 동일한 문서만 찾아도 35점).
+            - 예시1) 「액화석유가스의 안전관리 및 사업법」 과 「액화석유가스의 안전관리 및 사업법 시행규칙」 은 동일한 문서임(35점)
+            - 예시2) KGS FU433_231107.pdf 문서는 실제 답변에서 언급된 KGS FU432 2.3.3.4(3) 문서와 동일한 문서임(35점), KGS FU433와 비슷하게 KGS+코드값 패턴의 제목 문서는 핵심 코드만 같으면 같은 문서입니다.
+            세부 규칙 2) 법령 문서의 경우 장, 절, 관, 조, 항을 정확하게 제시했다면 추가로 5점을 주고 40점 만점으로 평가. 
+            2. 완전성 (20점): 실제 답변과 비교했을때 <질의요지>에 핵심 질문의 내용을 비슷하게 파악했는지.
+            3. 신뢰성 (30점) : 실제 답변과 무관하게 모델이 검색한 문서의 내용을 기반으로 답했는지.(실제 답변과 달라도 검색문서를 기반으로 답변했으면 만점)
+            4. 구조 준수 (10점): <질의요지>, <답변내용> 말머리를 정확히 표기하여 작성하였는지(고정 인사말이나 답변자정보 및 세부 구조는 제외하고 저 말머리만 준수하면 만점.)
             
             각각 항목별 점수와 한문장 이내의 간단한 평가 이유를 작성하세요.
             각 4가지 기준 점수는 반드시 '정확성: 20점'과 같은 형식으로 작성해야 합니다. '정확성(10/50)' 이런 형식은 안됩니다.
@@ -114,6 +118,9 @@ def evaluate_with_gpt4(question, real_answer, llm_answer):
             
             [LLM 답변]
             {llm_answer}
+            
+            [검색 문서]
+            {retrieved_documents}
             
             위 내용을 위 기준에 따라 평가해주세요.
              """,
@@ -133,7 +140,7 @@ def evaluate_with_gpt4(question, real_answer, llm_answer):
         import re
 
         # total_score_match = re.search(r"총점[^\d]*(\d+)점", evaluation_text)
-        accuracy_match = re.search(r"정확성[^\d]*(\d+)점", evaluation_text)
+        accuracy_match = re.search(r"신뢰성[^\d]*(\d+)점", evaluation_text)
         completeness_match = re.search(r"완전성[^\d]*(\d+)점", evaluation_text)
         evidence_match = re.search(r"근거 일치[^\d]*(\d+)점", evaluation_text)
         structure_match = re.search(r"구조 준수[^\d]*(\d+)점", evaluation_text)
@@ -157,7 +164,7 @@ def process_question(question, index):
         result = run_rag(question)
         answer = result["answer"]
         # print(f"질문 처리 완료. 결과: {answer[:100]}...")
-        return index, answer
+        return index, answer, result["retrieved_documents"]
     except Exception as e:
         error_msg = f"오류 발생: {str(e)}"
         print(f"오류 발생: {str(e)}")
@@ -203,11 +210,27 @@ if st.button("응답 생성", use_container_width=True):
                 # 결과 수집
                 completed = 0
                 for future in as_completed(futures):
-                    idx, answer = future.result()
+                    idx, answer, retrieved_documents = future.result()
 
                     # 데이터프레임 업데이트
                     df.at[idx, "llm_answer"] = answer
 
+                    # Document 객체에서 필요한 정보만 추출
+                    processed_docs = []
+                    for doc in retrieved_documents:
+                        doc_info = {
+                            "id": getattr(doc, "id", None),
+                            "file_name": doc.metadata.get("filename", ""),
+                            # "page_content": doc.page_content[:200] + "..."
+                            "page_content": doc.page_content,
+                            # if len(doc.page_content) > 200
+                            # else doc.page_content,
+                        }
+                        processed_docs.append(doc_info)
+
+                    df.at[idx, "retrieved_documents"] = json.dumps(
+                        processed_docs, ensure_ascii=False
+                    )
                     # 진행 상황 업데이트
                     completed += 1
                     progress = completed / total
@@ -226,7 +249,9 @@ if st.button("응답 생성", use_container_width=True):
 # 데이터프레임 표시
 if st.session_state.has_llm_answers and st.session_state.ready_df is not None:
     st.subheader("LLM 응답 결과")
-    show_df = st.session_state.ready_df[["제목", "질문", "답변", "llm_answer"]]
+    show_df = st.session_state.ready_df[
+        ["제목", "질문", "답변", "llm_answer", "retrieved_documents"]
+    ]
     st.dataframe(
         show_df.rename(
             columns={
@@ -234,6 +259,7 @@ if st.session_state.has_llm_answers and st.session_state.ready_df is not None:
                 "질문": "민원 내용",
                 "답변": "실제 답변",
                 "llm_answer": "LLM 답변",
+                "retrieved_documents": "검색 문서",
             }
         ),
         use_container_width=True,
@@ -243,6 +269,7 @@ if st.session_state.has_llm_answers and st.session_state.ready_df is not None:
             "민원 내용": st.column_config.TextColumn(width="small"),
             "실제 답변": st.column_config.TextColumn(width="small"),
             "LLM 답변": st.column_config.TextColumn(width="medium"),
+            "검색 문서": st.column_config.TextColumn(width="medium"),
         },
     )
 
@@ -261,12 +288,18 @@ if st.session_state.has_llm_answers and st.session_state.ready_df is not None:
             def process_evaluation(idx):
                 row = df.loc[idx]
                 evaluation_result = evaluate_with_gpt4(
-                    row["질문"], row["답변"], row["llm_answer"]
+                    row["질문"],
+                    row["답변"],
+                    row["llm_answer"],
+                    row["retrieved_documents"],
                 )
+
                 return idx, evaluation_result
 
             # ThreadPoolExecutor를 사용한 병렬 처리
-            with ThreadPoolExecutor(max_workers=4) as executor:
+            with ThreadPoolExecutor(
+                max_workers=2
+            ) as executor:  # 병렬 처리 수를 2로 줄임
                 # 작업 제출
                 futures = [
                     executor.submit(process_evaluation, idx) for idx in range(len(df))
@@ -300,6 +333,10 @@ if st.session_state.has_llm_answers and st.session_state.ready_df is not None:
                     progress = completed / total
                     progress_bar.progress(progress)
                     status_text.text(f"평가 중... {completed}/{total} 완료")
+
+                    # rate limit 방지를 위한 지연 시간 추가
+                    if completed < total:  # 마지막 항목이 아닌 경우에만 대기
+                        time.sleep(10)  # 10초 대기
 
             end_time = time.time()
 
@@ -344,7 +381,7 @@ if st.session_state.has_evaluation and st.session_state.ready_df is not None:
         column_config={
             "민원 제목": st.column_config.TextColumn(width="small"),
             "총점": st.column_config.NumberColumn(width="small"),
-            "정확성": st.column_config.NumberColumn(width="small"),
+            "신뢰성": st.column_config.NumberColumn(width="small"),
             "완전성": st.column_config.NumberColumn(width="small"),
             "근거 일치": st.column_config.NumberColumn(width="small"),
             "구조 준수": st.column_config.NumberColumn(width="small"),
@@ -368,8 +405,8 @@ if st.session_state.has_evaluation and st.session_state.ready_df is not None:
         st.caption("전체 점수 평균 (100점 만점)")
 
     with col2:
-        st.metric("정확성 평균", f"{avg_accuracy:.1f}점")
-        st.caption("질문에 정확하고 올바르게 답변했는지 (50점 만점)")
+        st.metric("신뢰성 평균", f"{avg_accuracy:.1f}점")
+        st.caption("정답과 무관하게 찾은 문서를 기반으로 답변했는지 (50점 만점)")
 
     with col3:
         st.metric("완전성 평균", f"{avg_completeness:.1f}점")

@@ -30,12 +30,9 @@ CHROMA_DB_PATH = "data/vector_db"
 # 카테고리별 영문 컬렉션 이름 매핑
 CATEGORY_COLLECTION_MAP = {
     "법령": "law",
-    "지침": "guideline",
-    "유권해석": "interpretation",
     "수수료": "fee",
-    "코드": "code",
-    "착안사항": "point",
-    "기타정보": "etc",
+    "체적거래제": "volume_trade",
+    "기타": "etc",
 }
 
 

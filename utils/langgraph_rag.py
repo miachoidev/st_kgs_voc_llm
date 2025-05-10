@@ -25,17 +25,14 @@ CHROMA_DB_PATH = "data/vector_db"
 CSV_PATH = "data/qa_csv/merged_qa.csv"
 
 # 카테고리 정의
-CATEGORIES = ["법령", "지침", "유권해석", "수수료", "코드", "착안사항", "기타정보"]
+CATEGORIES = ["법령", "수수료", "체적거래제", "기타"]
 
 # 카테고리별 영문 컬렉션 이름 매핑
 CATEGORY_COLLECTION_MAP = {
     "법령": "law",
-    "지침": "guideline",
-    "유권해석": "interpretation",
     "수수료": "fee",
-    "코드": "code",
-    "착안사항": "point",
-    "기타정보": "etc",
+    "체적거래제": "volume_trade",
+    "기타": "etc",
 }
 
 
@@ -101,49 +98,52 @@ def classify_query(state: AgentState) -> AgentState:
     llm = ChatOpenAI(temperature=0, api_key=OPENAI_API_KEY)
 
     prompt = PromptTemplate.from_template("""
-    당신은 한국가스안전공사 관련 사용자 질문을 7개 카테고리로 분류하는 전문가입니다. 다음 카테고리 중 최대 2개를 선택하여 사용자 질문을 분류해주세요:
+    당신은 한국가스안전공사 관련 사용자 질문을 4개 카테고리로 분류하는 전문가입니다. 사용자 질문에 답변하기 위해 어떤 종류의 문서를 참고해야할지 분류하세요.
 
-    1. **법령**: 액화석유가스 안전관리법 또는 고압가스안전관리법의 시행령, 시행규칙, 고시, 훈령, 예규, 별첨 등 법적 효력이 있는 질문
-    2. **지침**:  LPG충전.저장.집단공급.판매(영업소 포함).특정사용시설의 기술검토 및 검사에 관한 세부 처리방법 질문 
-    3. **수수료**: 검사비, 수수료 기준, 요금표, 부과 기준, 납부 방법 등 비용 관련 질문
-    4. **시설**: 액화석유가스,소형저장탱크,방폭전기기,가스시설 용접,가스시설 전기방식 ,주거용/상업용 가스보일러의 시설,설계,설치,비파괴시험검사기준에 대한 질문
-    5. **기타정보**: 위 6개 카테고리에 명확하게 해당되지 않는 모든 질문
+1. **법령**  
+: 가스안전 관련 법령(법률, 시행령, 시행규칙, 고시, 훈령, 예규)과 설치 및 검사 등에 필요한 기술기준(기술코드, 표준코드 등)을 함께 참고해야 하는 질문  
+ 액화석유가스,소형저장탱크,방폭전기기,가스시설 용접,가스시설 전기방식 ,주거용/상업용 가스보일러의 시설,설계,설치,비파괴시험검사기준에 대한 질문
+(※ 실제 설치 방법, 검사 기준, 설비 요건, 규정 준수 여부 등)
 
-    ## 카테고리별 핵심 키워드
+2. **수수료**  
+: 검사비, 수수료, 요금표, 부과 기준, 납부 방법 등 비용 관련 질문
 
-    ### 1. 법령
-    - 법률, 시행령, 시행규칙, 고시, 훈령, 예규, 법적 의무, 규제, 준수사항, 가스안전법, 고압가스안전관리법, 액화석유가스법
+3. **체적거래제**  
+: 체적 거래제(가스 판매 방식, 거래 기준, 가격 책정 등)와 관련된 질문
 
-    ### 2. 지침
-    - 업무지침, 가이드라인, 절차서, 표준 절차, 매뉴얼, 업무수행 방법, 지침서, 작업지침, 안전관리지침, 기술지침
+4. **기타**  
+: 위 1~3번에 명확히 해당되지 않는 모든 질문
 
-    ### 3. 유권해석
-    - 캠핑카, 유권해석, 사례집, 질의회신, 행정해석, 판례, 유권질의, 법령해설, 법적견해, 법률자문, 해석례, 질의응답
 
-    ### 4. 수수료
-    - 검사비, 수수료, 요금표, 부과기준, 납부방법, 검사수수료, 인증수수료, 심사비용, 검정비용, 수수료 감면
+## 카테고리별 핵심 키워드
 
-    ### 5. 코드
-    - 기술코드, 표준코드, 품질코드, 안전코드, 시스템코드, KGS코드, 가스설비코드, 배관코드, 산업코드, 기준코드
+### 1. 법령
+- 법률, 시행령, 시행규칙, 고시, 훈령, 예규, 법적 의무, 규제 준수
+- 기술코드, 표준코드, 품질코드, 안전코드, 가스설비 설치기준, 검사기준, 설계기준
+- 설치 방법, 검사 절차, 설비 요건, 현장 설치 방식, 배관, 용접, 탱크 교체, 시설 변경
 
-    ### 6. 착안사항
-    - 점검 주의사항, 검사 착안점, 심사 고려사항, 점검 포인트, 검사 중점사항, 실무적용 참고사항, 안전점검 착안점
+### 2. 수수료
+- 검사비, 인증비용, 수수료 기준, 요금표, 납부 방법, 수수료 감면
 
-    ### 7. 기타정보
-    - 위의 6개 카테고리에 해당되지 않는 모든 키워드
+### 3. 체적거래제
+- 체적 거래 기준, 가스 거래 방법, 체적 거래 가격, 거래 방식
 
-    ## 분류 지시사항
+### 4. 기타
+- 위의 3개 카테고리에 해당되지 않는 모든 키워드
 
-    1. 사용자의 질문을 주의 깊게 읽으세요.
-    2. 질문에 포함된 키워드를 확인하세요.
-    3. 질문의 의도와 목적을 파악하세요.
-    4. 가장 적합한 카테고리를 선택하세요.
-    5. 여러 카테고리에 해당할 경우, 질문의 주된 목적에 따라 선택하세요.
-    6. '1~6번' 카테고리에 명확하게 해당되지 않는 경우 '7. 기타정보' 카테고리로 분류하세요.
+## 분류 지시사항
+
+1. 사용자의 질문을 주의 깊게 읽으세요.
+2. 질문에 포함된 키워드를 확인하세요.
+3. 질문의 의도(정보 요청 vs 실제 설치/검사 방법 등)를 파악하세요.
+4. 가장 적합한 카테고리를 선택하세요.
+5. 여러 카테고리에 해당할 경우, 질문의 주된 목적에 따라 선택하세요.
+6. '1~3번' 카테고리에 명확하게 해당되지 않으면 '4. 기타'로 분류하세요.
+7. 분류 결과와 그 이유를 간략히 설명하세요.
 
     질문: {question}
     
-    응답 형식: 카테고리 번호만 숫자로 답변하세요 (1~7)
+    응답 형식: 카테고리 번호만 숫자로 답변하세요 (1~4)
     """)
 
     chain = prompt | llm
@@ -160,16 +160,13 @@ def classify_query(state: AgentState) -> AgentState:
     # 카테고리 번호에 따른 카테고리 매핑
     category_map = {
         1: "법령",
-        2: "지침",
-        3: "유권해석",
-        4: "수수료",
-        5: "코드",
-        6: "착안사항",
-        7: "기타정보",
+        2: "수수료",
+        3: "체적거래제",
+        4: "기타",
     }
 
     if category_number is None:
-        category_kr = "기타정보"
+        category_kr = "기타"
     else:
         category_kr = category_map[category_number]
 
@@ -353,7 +350,6 @@ def generate_answer(state: AgentState, streaming: bool = False) -> AgentState:
         }
     else:
         # 일반 모드에서는 전체 결과 반환
-        print(f"일반모드!!!!!!:")
         result = chain.invoke({"context": context, "question": question})
 
         return {
@@ -377,7 +373,7 @@ def create_rag_workflow(streaming=False):
     workflow = StateGraph(AgentState)
 
     # 노드 추가
-    # workflow.add_node("classify_query", classify_query)
+    workflow.add_node("classify_query", classify_query)
     workflow.add_node("ensemble_search", ensemble_search)
     # streaming 파라미터를 전달하기 위한 함수 래퍼 생성
     workflow.add_node(
@@ -385,11 +381,11 @@ def create_rag_workflow(streaming=False):
     )
 
     # 엣지 연결 - 최신 LangGraph API 사용
-    # workflow.set_entry_point("classify_query")
-    workflow.set_entry_point("ensemble_search")
+    workflow.set_entry_point("classify_query")
+    # workflow.set_entry_point("ensemble_search")
 
     # 노드 간 연결 정의
-    # workflow.add_edge("classify_query", "ensemble_search")
+    workflow.add_edge("classify_query", "ensemble_search")
     workflow.add_edge("ensemble_search", "generate_answer")
 
     # 종료 노드 설정
